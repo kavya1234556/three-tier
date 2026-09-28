@@ -8,6 +8,12 @@ app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
+// ---- Database model ----
+const Item = mongoose.model(
+  "Item",
+  new mongoose.Schema({ name: String }, { timestamps: true }),
+);
+
 // ---- Prometheus metrics ----
 const register = new client.Registry();
 client.collectDefaultMetrics({ register }); // memory, CPU, event loop lag, GC
@@ -33,6 +39,27 @@ const itemsCreated = new client.Counter({
   registers: [register],
 });
 
+// Evaluated on each scrape
+new client.Gauge({
+  name: "mongodb_connection_up",
+  help: "1 if the backend is connected to MongoDB, 0 otherwise",
+  registers: [register],
+  collect() {
+    this.set(mongoose.connection.readyState === 1 ? 1 : 0);
+  },
+});
+
+new client.Gauge({
+  name: "items_stored",
+  help: "Number of items currently stored in MongoDB",
+  registers: [register],
+  async collect() {
+    if (mongoose.connection.readyState === 1) {
+      this.set(await Item.estimatedDocumentCount());
+    }
+  },
+});
+
 // Record every request's count and duration
 app.use((req, res, next) => {
   const end = httpDuration.startTimer();
@@ -44,12 +71,6 @@ app.use((req, res, next) => {
   });
   next();
 });
-
-// ---- Database model ----
-const Item = mongoose.model(
-  "Item",
-  new mongoose.Schema({ name: String }, { timestamps: true }),
-);
 
 // ---- Routes ----
 app.get("/api/health", (req, res) => {

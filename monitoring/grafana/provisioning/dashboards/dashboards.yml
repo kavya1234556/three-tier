@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: three-tier
+    folder: Three-Tier App
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/grafana/dashboards
